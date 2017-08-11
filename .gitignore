@@ -1,5 +1,9 @@
 # Prerequisites
 *.d
+Debug/
+Readme.txt
+log.txt
+user32.vcxproj*
 
 # Compiled Object files
 *.slo
